@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/panosxy/file-client-task/types"
 	"github.com/panosxy/file-client-task/utils"
 )
 
@@ -21,12 +21,17 @@ const (
 	downloaderStarted
 )
 
+type FileContent struct {
+	Filename string
+	Content  *io.ReadCloser
+}
+
 type ConcurrentDownloader struct {
 	wg       sync.WaitGroup
 	mutex    sync.Mutex
 	url      string
 	queue    []string
-	resultCh chan *types.FileContent
+	resultCh chan *FileContent
 	doneCh   chan struct{}
 	state    downloaderState
 	workers  uint
@@ -43,7 +48,7 @@ func NewConcurrentDownloader(log *utils.Logger, workers uint) *ConcurrentDownloa
 	return d
 }
 
-func (d *ConcurrentDownloader) Subscribe(url string, queue []string, resultCh chan *types.FileContent, doneCh chan struct{}) error {
+func (d *ConcurrentDownloader) Subscribe(url string, queue []string, resultCh chan *FileContent, doneCh chan struct{}) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	if url == "" {
@@ -117,7 +122,7 @@ func (d *ConcurrentDownloader) getFile(filename string) {
 		d.log.Error(fmt.Sprintf("Couldn't download file '%s': %v", filename, err))
 		return
 	}
-	res := &types.FileContent{
+	res := &FileContent{
 		Filename: filename,
 		Content:  &resp.Body,
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/panosxy/file-client-task/downloader"
 	"github.com/panosxy/file-client-task/store"
-	"github.com/panosxy/file-client-task/types"
 	"github.com/panosxy/file-client-task/utils"
 )
 
@@ -17,7 +16,7 @@ type client struct {
 	downloader *downloader.ConcurrentDownloader
 	url        string
 	char       []byte
-	dlResult   chan *types.FileContent
+	dlResult   chan *downloader.FileContent
 	dlDone     chan struct{}
 	log        *utils.Logger
 }
@@ -32,7 +31,7 @@ func NewClient(url, char string, workers uint, log *utils.Logger) (*client, erro
 		return nil, fmt.Errorf("'%s' is not a signle character", char)
 	}
 	c.char = []byte(char)
-	c.dlResult = make(chan *types.FileContent, workers)
+	c.dlResult = make(chan *downloader.FileContent, workers)
 	c.dlDone = make(chan struct{})
 	c.log = log
 	return c, nil
