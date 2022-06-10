@@ -128,10 +128,14 @@ DownloadLoop:
 
 func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
 	// Store
-	cnt := ioutil.NopCloser(content)
-	c.files.SetFileContent(filename, &cnt)
+	body, err := ioutil.ReadAll(content)
+	if err != nil {
+		return fmt.Errorf("Failed to read response for file '%s': %v", filename, err)
+	}
+	cnt := ioutil.NopCloser(bytes.NewReader(body))
+	c.files.SetFileContent(filename, body)
 	// Scan for index
-	scanner := bufio.NewScanner(content)
+	scanner := bufio.NewScanner(cnt)
 	scanner.Split(bufio.ScanRunes)
 	c.minCharIndex.Lock()
 	for i := 0; scanner.Scan(); i++ {

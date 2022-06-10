@@ -2,6 +2,7 @@ package store
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -10,12 +11,12 @@ import (
 
 type FileStorage struct {
 	mutex sync.RWMutex
-	files map[string]*io.ReadCloser
+	files map[string][]byte
 }
 
 func NewFileStorage() *FileStorage {
 	fs := new(FileStorage)
-	fs.files = make(map[string]*io.ReadCloser)
+	fs.files = make(map[string][]byte)
 	return fs
 }
 
@@ -41,7 +42,7 @@ func (fs *FileStorage) GetFilesnames() []string {
 	return filenames
 }
 
-func (fs *FileStorage) SetFileContent(filename string, content *io.ReadCloser) {
+func (fs *FileStorage) SetFileContent(filename string, content []byte) {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 	fs.files[filename] = content
@@ -72,7 +73,7 @@ func (fs *FileStorage) appendFiles(filename string, zipw *zip.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(w, *fs.files[filename]); err != nil {
+	if _, err := io.Copy(w, bytes.NewReader(fs.files[filename])); err != nil {
 		return err
 	}
 	return nil

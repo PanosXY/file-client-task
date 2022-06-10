@@ -112,6 +112,7 @@ func (d *ConcurrentDownloader) getFile(filename string) {
 		d.log.Error(fmt.Sprintf("Couldn't download file '%s': %v", filename, err))
 		return
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		d.log.Error(fmt.Sprintf("Couldn't download file '%s': %v", filename, err))
 		return
