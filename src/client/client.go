@@ -14,14 +14,26 @@ import (
 	"github.com/PanosXY/file-client-task/utils"
 )
 
+type indexHandler struct {
+	sync.Mutex
+	index int
+}
+
+func newIndexHandler() *indexHandler {
+	ih := new(indexHandler)
+	ih.index = -1
+	return ih
+}
+
 type client struct {
-	wg         sync.WaitGroup
-	files      *store.FileStorage
-	downloader *downloader.ConcurrentDownloader
-	url        string
-	char       []byte
-	dlDone     chan struct{}
-	log        *utils.Logger
+	wg           sync.WaitGroup
+	files        *store.FileStorage
+	downloader   *downloader.ConcurrentDownloader
+	url          string
+	char         []byte
+	dlDone       chan struct{}
+	minCharIndex *indexHandler
+	log          *utils.Logger
 }
 
 func NewClient(url, char string, workers uint, log *utils.Logger) (*client, error) {
@@ -35,6 +47,7 @@ func NewClient(url, char string, workers uint, log *utils.Logger) (*client, erro
 	}
 	c.char = []byte(char)
 	c.dlDone = make(chan struct{})
+	c.minCharIndex = newIndexHandler()
 	c.log = log
 	return c, nil
 }
@@ -48,6 +61,7 @@ func (c *client) Do() error {
 	if err := c.getFiles(); err != nil {
 		return fmt.Errorf("Error on getting the files from the server: %v", err)
 	}
+	// TODO: Download file(s)
 	return nil
 }
 
@@ -101,11 +115,16 @@ func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
 	// Scan for index
 	scanner := bufio.NewScanner(content)
 	scanner.Split(bufio.ScanRunes)
+	c.minCharIndex.Lock()
 	for i := 0; scanner.Scan(); i++ {
+		if c.minCharIndex.index != -1 && i > c.minCharIndex.index {
+			break
+		}
 		if bytes.Compare(scanner.Bytes(), c.char) == 0 {
-			c.files.SetFileCharIndex(filename, i)
+			c.minCharIndex.index = i
 			break
 		}
 	}
+	c.minCharIndex.Unlock()
 	return nil
 }
