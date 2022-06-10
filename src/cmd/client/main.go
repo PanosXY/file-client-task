@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/panosxy/file-client-task/client"
-	"github.com/panosxy/file-client-task/utils"
+	"github.com/PanosXY/file-client-task/client"
+	"github.com/PanosXY/file-client-task/utils"
 )
 
 func main() {

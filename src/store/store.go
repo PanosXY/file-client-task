@@ -25,6 +25,7 @@ func (fs *FileStorage) NewFile(filename string) {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 	fs.files[filename] = new(fileInfo)
+	fs.files[filename].charIndex = -1
 }
 
 func (fs *FileStorage) Len() int {

@@ -1,13 +1,17 @@
 package client
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"sync"
 
-	"github.com/panosxy/file-client-task/downloader"
-	"github.com/panosxy/file-client-task/store"
-	"github.com/panosxy/file-client-task/utils"
+	"github.com/PanosXY/file-client-task/downloader"
+	"github.com/PanosXY/file-client-task/store"
+	"github.com/PanosXY/file-client-task/utils"
 )
 
 type client struct {
@@ -16,7 +20,6 @@ type client struct {
 	downloader *downloader.ConcurrentDownloader
 	url        string
 	char       []byte
-	dlResult   chan *downloader.FileContent
 	dlDone     chan struct{}
 	log        *utils.Logger
 }
@@ -31,7 +34,6 @@ func NewClient(url, char string, workers uint, log *utils.Logger) (*client, erro
 		return nil, fmt.Errorf("'%s' is not a signle character", char)
 	}
 	c.char = []byte(char)
-	c.dlResult = make(chan *downloader.FileContent, workers)
 	c.dlDone = make(chan struct{})
 	c.log = log
 	return c, nil
@@ -39,29 +41,17 @@ func NewClient(url, char string, workers uint, log *utils.Logger) (*client, erro
 
 func (c *client) Do() error {
 	// List files
+	if err := c.listFiles(); err != nil {
+		return fmt.Errorf("Error on listing the files from the server: %v", err)
+	}
+	// Get files & char index
 	if err := c.getFiles(); err != nil {
 		return fmt.Errorf("Error on getting the files from the server: %v", err)
-	}
-	// Get files
-	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.dlResult, c.dlDone); err != nil {
-		return fmt.Errorf("Error on downloader subscription: %v", err)
-	}
-	c.downloader.Start()
-
-DownloadLoop:
-	for {
-		select {
-		case fc := <-c.dlResult:
-			c.files.SetFileContent(fc.Filename, fc.Content)
-		case <-c.dlDone:
-			c.log.Info("Download done!")
-			break DownloadLoop
-		}
 	}
 	return nil
 }
 
-func (c *client) getFiles() error {
+func (c *client) listFiles() error {
 	files, err := listPath(c.url)
 	if err != nil {
 		return fmt.Errorf("Could't list '%s' url: %v", c.url, err)
@@ -69,7 +59,7 @@ func (c *client) getFiles() error {
 	if len(files) == 0 {
 		return fmt.Errorf("Requested path is empty")
 	}
-	c.log.Info(fmt.Sprintf("Retrieved files: %v\n", files))
+	c.log.Info(fmt.Sprintf("Files list: %v", files))
 	for _, filename := range files {
 		c.files.NewFile(filename)
 	}
@@ -86,4 +76,36 @@ func listPath(url string) ([]string, error) {
 		return nil, err
 	}
 	return utils.GetLinks(resp.Body), nil
+}
+
+func (c *client) getFiles() error {
+	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.dlDone, c.storeAndScan); err != nil {
+		return fmt.Errorf("Error on downloader subscription: %v", err)
+	}
+	c.downloader.Start()
+DownloadLoop:
+	for {
+		select {
+		case <-c.dlDone:
+			c.log.Info("Fetching files' content done!")
+			break DownloadLoop
+		}
+	}
+	return nil
+}
+
+func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
+	// Store
+	cnt := ioutil.NopCloser(content)
+	c.files.SetFileContent(filename, &cnt)
+	// Scan for index
+	scanner := bufio.NewScanner(content)
+	scanner.Split(bufio.ScanRunes)
+	for i := 0; scanner.Scan(); i++ {
+		if bytes.Compare(scanner.Bytes(), c.char) == 0 {
+			c.files.SetFileCharIndex(filename, i)
+			break
+		}
+	}
+	return nil
 }

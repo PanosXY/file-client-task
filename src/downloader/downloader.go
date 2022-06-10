@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/panosxy/file-client-task/utils"
+	"github.com/PanosXY/file-client-task/utils"
 )
 
 // A non blocking concurrent downloader
@@ -21,21 +21,18 @@ const (
 	downloaderStarted
 )
 
-type FileContent struct {
-	Filename string
-	Content  *io.ReadCloser
-}
+type handlerFunc func(string, io.ReadCloser) error
 
 type ConcurrentDownloader struct {
-	wg       sync.WaitGroup
-	mutex    sync.Mutex
-	url      string
-	queue    []string
-	resultCh chan *FileContent
-	doneCh   chan struct{}
-	state    downloaderState
-	workers  uint
-	log      *utils.Logger
+	wg          sync.WaitGroup
+	mutex       sync.Mutex
+	url         string
+	queue       []string
+	doneCh      chan struct{}
+	state       downloaderState
+	workers     uint
+	respHandler handlerFunc
+	log         *utils.Logger
 }
 
 func NewConcurrentDownloader(log *utils.Logger, workers uint) *ConcurrentDownloader {
@@ -48,7 +45,7 @@ func NewConcurrentDownloader(log *utils.Logger, workers uint) *ConcurrentDownloa
 	return d
 }
 
-func (d *ConcurrentDownloader) Subscribe(url string, queue []string, resultCh chan *FileContent, doneCh chan struct{}) error {
+func (d *ConcurrentDownloader) Subscribe(url string, queue []string, doneCh chan struct{}, rh handlerFunc) error {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	if url == "" {
@@ -59,14 +56,12 @@ func (d *ConcurrentDownloader) Subscribe(url string, queue []string, resultCh ch
 		return errors.New("The subscribed filenames queue is empty")
 	}
 	d.queue = queue
-	if resultCh == nil {
-		return errors.New("The subscribed result channel is nil")
-	}
-	d.resultCh = resultCh
 	if doneCh == nil {
 		return errors.New("The subscribed done channel is nil")
 	}
 	d.doneCh = doneCh
+	// Response Handler is not mandatory
+	d.respHandler = rh
 	return nil
 }
 
@@ -117,21 +112,15 @@ func (d *ConcurrentDownloader) getFile(filename string) {
 		d.log.Error(fmt.Sprintf("Couldn't download file '%s': %v", filename, err))
 		return
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		d.log.Error(fmt.Sprintf("Couldn't download file '%s': %v", filename, err))
 		return
 	}
-	res := &FileContent{
-		Filename: filename,
-		Content:  &resp.Body,
-	}
-	select {
-	case d.resultCh <- res:
-		return
-	default:
-		d.log.Error("Failed to write result on subscribed channel")
-		break
+	if d.respHandler != nil {
+		if err := d.respHandler(filename, resp.Body); err != nil {
+			d.log.Error(fmt.Sprintf("Failed operate in the file '%s': %v", filename, err))
+			return
+		}
 	}
 }
 
@@ -140,7 +129,6 @@ func (d *ConcurrentDownloader) cleanup() {
 	d.mutex.Unlock()
 	d.url = ""
 	d.queue = []string{}
-	d.resultCh = nil
 	d.doneCh = nil
 	d.state = downloaderIdle
 }

@@ -1,4 +1,4 @@
-module github.com/panosxy/file-client-task
+module github.com/PanosXY/file-client-task
 
 go 1.18
 
