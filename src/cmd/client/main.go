@@ -13,6 +13,7 @@ func main() {
 	char := flag.String("char", "A", "The files' matching character")
 	debug := flag.Bool("debug", true, "Logger's debug flag")
 	maxWorkers := flag.Uint("max-concurrent-downloads", 4, "The number of maximum concurrent downloads")
+	dlPath := flag.String("download-path", "./", "The path that the files going to be stored")
 	flag.Parse()
 
 	log, err := utils.NewLogger(*debug)
@@ -22,7 +23,7 @@ func main() {
 	defer log.Info("Client stopped")
 
 	log.Info("Initializing...")
-	c, err := client.NewClient(*url, *char, *maxWorkers, log)
+	c, err := client.NewClient(*url, *char, *maxWorkers, *dlPath, log)
 	if err != nil {
 		log.Error(fmt.Sprintf("Error initializing client: %v", err))
 		return

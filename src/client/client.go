@@ -14,6 +14,10 @@ import (
 	"github.com/PanosXY/file-client-task/utils"
 )
 
+const (
+	zipFilename = "file-client-task.zip"
+)
+
 type indexHandler struct {
 	sync.Mutex
 	index int
@@ -26,6 +30,7 @@ func newIndexHandler() *indexHandler {
 }
 
 type client struct {
+	mutex        sync.Mutex
 	wg           sync.WaitGroup
 	files        *store.FileStorage
 	downloader   *downloader.ConcurrentDownloader
@@ -33,11 +38,14 @@ type client struct {
 	char         []byte
 	dlDone       chan struct{}
 	minCharIndex *indexHandler
+	filesToDl    map[int][]string
+	dlPath       string
 	log          *utils.Logger
 }
 
-func NewClient(url, char string, workers uint, log *utils.Logger) (*client, error) {
+func NewClient(url, char string, workers uint, dlPath string, log *utils.Logger) (*client, error) {
 	c := new(client)
+	c.mutex = sync.Mutex{}
 	c.wg = sync.WaitGroup{}
 	c.files = store.NewFileStorage()
 	c.downloader = downloader.NewConcurrentDownloader(log, workers)
@@ -48,6 +56,8 @@ func NewClient(url, char string, workers uint, log *utils.Logger) (*client, erro
 	c.char = []byte(char)
 	c.dlDone = make(chan struct{})
 	c.minCharIndex = newIndexHandler()
+	c.filesToDl = make(map[int][]string)
+	c.dlPath = dlPath
 	c.log = log
 	return c, nil
 }
@@ -61,7 +71,15 @@ func (c *client) Do() error {
 	if err := c.getFiles(); err != nil {
 		return fmt.Errorf("Error on getting the files from the server: %v", err)
 	}
-	// TODO: Download file(s)
+	// Download file(s)
+	if c.minCharIndex.index == -1 {
+		c.log.Info(fmt.Sprintf("No files found including character '%s' on url '%s'", c.char, c.url))
+		return nil
+	}
+	if err := c.files.SaveFiles(c.dlPath, zipFilename, c.filesToDl[c.minCharIndex.index]); err != nil {
+		return fmt.Errorf("Error on downloading file(s): %v", err)
+	}
+	c.log.Info(fmt.Sprintf("File(s) downloaded successfully in '%s'", c.dlPath+"/"+zipFilename))
 	return nil
 }
 
@@ -122,9 +140,20 @@ func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
 		}
 		if bytes.Compare(scanner.Bytes(), c.char) == 0 {
 			c.minCharIndex.index = i
+			c.fileToDownload(i, filename)
 			break
 		}
 	}
 	c.minCharIndex.Unlock()
 	return nil
+}
+
+func (c *client) fileToDownload(idx int, filename string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if _, ok := c.filesToDl[idx]; !ok {
+		c.filesToDl[idx] = []string{filename}
+	} else {
+		c.filesToDl[idx] = append(c.filesToDl[idx], filename)
+	}
 }

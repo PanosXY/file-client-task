@@ -1,7 +1,10 @@
 package store
 
 import (
+	"archive/zip"
+	"fmt"
 	"io"
+	"os"
 	"sync"
 )
 
@@ -44,14 +47,33 @@ func (fs *FileStorage) SetFileContent(filename string, content *io.ReadCloser) {
 	fs.files[filename] = content
 }
 
-func (fs *FileStorage) DeleteFile(filename string) {
+func (fs *FileStorage) SaveFiles(path, zipFilename string, filenames []string) error {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
-	delete(fs.files, filename)
+	file, err := os.Create(path + "/" + zipFilename)
+	if err != nil {
+		return fmt.Errorf("Failed to create zip file: %v", err)
+	}
+	defer file.Close()
+
+	zipw := zip.NewWriter(file)
+	defer zipw.Close()
+
+	for _, filename := range filenames {
+		if err := fs.appendFiles(filename, zipw); err != nil {
+			return fmt.Errorf("Failed to add file %s to zip: %s", filename, err)
+		}
+	}
+	return nil
 }
 
-func (fs *FileStorage) GetFileContent(filename string) *io.ReadCloser {
-	fs.mutex.RLock()
-	defer fs.mutex.RUnlock()
-	return fs.files[filename]
+func (fs *FileStorage) appendFiles(filename string, zipw *zip.Writer) error {
+	w, err := zipw.Create(filename)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(w, *fs.files[filename]); err != nil {
+		return err
+	}
+	return nil
 }
