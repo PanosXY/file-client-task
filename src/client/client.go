@@ -138,6 +138,7 @@ func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
 	c.minCharIndex.Lock()
 	for i := 0; scanner.Scan(); i++ {
 		if c.minCharIndex.index != -1 && i > c.minCharIndex.index {
+			// Break loop if file's index is greater than the stored min
 			break
 		}
 		if bytes.Compare(scanner.Bytes(), c.char) == 0 {

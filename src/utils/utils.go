@@ -34,7 +34,6 @@ func GetLinks(body io.Reader) []string {
 
 		switch tt {
 		case html.ErrorToken:
-			//todo: links list shoudn't contain duplicates
 			return links
 		case html.StartTagToken, html.EndTagToken:
 			token := z.Token()
@@ -43,7 +42,6 @@ func GetLinks(body io.Reader) []string {
 					if attr.Key == "href" {
 						links = append(links, attr.Val)
 					}
-
 				}
 			}
 		}
