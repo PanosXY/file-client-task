@@ -37,13 +37,13 @@ the least is processed. While scanner traversing the response body, if the curre
 Once the download has been completed, the client stores the files with the least index of the given character to a zip file.
 
 ### Usage:
--char string
-  	The files' matching character (default "A")
--debug
-  	Logger's debug flag (default true)
--download-path string
-  	The path that the files going to be stored (default "./")
--max-concurrent-downloads uint
-  	The number of maximum concurrent downloads (default 4)
--url string
-  	The requested file server's url (default "http://localhost:8080/")
+- char string
+-- The files' matching character (default "A")
+- debug
+-- Logger's debug flag (default true)
+- download-path string
+-- The path that the files going to be stored (default "./")
+- max-concurrent-downloads uint
+-- The number of maximum concurrent downloads (default 4)
+- url string
+-- The requested file server's url (default "http://localhost:8080/")
