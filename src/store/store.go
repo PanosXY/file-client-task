@@ -48,9 +48,18 @@ func (fs *FileStorage) SetFileContent(filename string, content []byte) {
 	fs.files[filename] = content
 }
 
+func (fs *FileStorage) GetFileContent(filename string) []byte {
+	fs.mutex.RLock()
+	defer fs.mutex.RUnlock()
+	return fs.files[filename]
+}
+
 func (fs *FileStorage) SaveFiles(path, zipFilename string, filenames []string) error {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
+	if len(filenames) == 0 {
+		return fmt.Errorf("There are no files to save")
+	}
 	file, err := os.Create(path + "/" + zipFilename)
 	if err != nil {
 		return fmt.Errorf("Failed to create zip file: %v", err)
