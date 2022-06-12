@@ -20,7 +20,7 @@ If the folder contains the following files on server:
 then 'file2' and 'file4' should be downloaded
 
 ### My solution for the above task:
-The client completes its execution with the abobe 3 steps:
+The client completes its execution with the below 3 steps:
 1. Client retrieves the filenames from the given url
 2. Client gets the files and the least index of the given character
 3. Client stores the files in a zip file
