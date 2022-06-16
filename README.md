@@ -20,7 +20,7 @@ If the folder contains the following files on server:
 then 'file2' and 'file4' should be downloaded
 
 ### My solution for the above task:
-The client completes its execution with the abobe 3 steps:
+The client completes its execution with the below 3 steps:
 1. Client retrieves the filenames from the given url
 2. Client gets the files and the least index of the given character
 3. Client stores the files in a zip file
@@ -37,13 +37,8 @@ the least is processed. While scanner traversing the response body, if the curre
 Once the download has been completed, the client stores the files with the least index of the given character to a zip file.
 
 ### Usage:
--char string
-  	The files' matching character (default "A")
--debug
-  	Logger's debug flag (default true)
--download-path string
-  	The path that the files going to be stored (default "./")
--max-concurrent-downloads uint
-  	The number of maximum concurrent downloads (default 4)
--url string
-  	The requested file server's url (default "http://localhost:8080/")
+* -char string := The files' matching character (default "A")
+* -debug := Logger's debug flag (default true)
+* -download-path string := The path that the files going to be stored (default "./")
+* -max-concurrent-downloads uint := The number of maximum concurrent downloads (default 4)
+* -url string := The requested file server's url (default "http://localhost:8080/")
