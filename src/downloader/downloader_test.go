@@ -14,16 +14,14 @@ func TestDownloaderSubscribe(t *testing.T) {
 
 	url := "http://google.com"
 	files := []string{"t"}
-	done := make(chan struct{})
 	handler := func(s string, rc io.ReadCloser) error {
 		return nil
 	}
 	// Test Subscribe with various passed parameters
-	assert.NoError(t, d.Subscribe(url, files, done, handler))
-	assert.NoError(t, d.Subscribe(url, files, done, nil))
-	assert.Error(t, d.Subscribe("", files, done, nil))
-	assert.Error(t, d.Subscribe(url, []string{}, done, nil))
-	assert.Error(t, d.Subscribe(url, files, nil, nil))
+	assert.NoError(t, d.Subscribe(url, files, handler))
+	assert.Error(t, d.Subscribe("", files, handler))
+	assert.Error(t, d.Subscribe(url, []string{}, handler))
+	assert.Error(t, d.Subscribe(url, files, nil))
 }
 
 func TestDownloaderDownload(t *testing.T) {
@@ -35,12 +33,11 @@ func TestDownloaderDownload(t *testing.T) {
 	// Test with already started
 	url := "http://google.com"
 	files := []string{"t"}
-	done := make(chan struct{})
 	handler := func(s string, rc io.ReadCloser) error {
 		time.Sleep(1000)
 		return nil
 	}
-	assert.NoError(t, d.Subscribe(url, files, done, handler))
+	assert.NoError(t, d.Subscribe(url, files, handler))
 	assert.NoError(t, d.Start())
 	err := d.Start()
 	assert.Error(t, err, err)

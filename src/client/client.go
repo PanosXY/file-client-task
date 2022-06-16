@@ -36,7 +36,6 @@ type client struct {
 	downloader   *downloader.ConcurrentDownloader
 	url          string
 	char         []byte
-	dlDone       chan struct{}
 	minCharIndex *indexHandler
 	filesToDl    map[int][]string
 	dlPath       string
@@ -45,8 +44,6 @@ type client struct {
 
 func NewClient(url, char string, workers uint, dlPath string, log *utils.Logger) (*client, error) {
 	c := new(client)
-	c.mutex = sync.Mutex{}
-	c.wg = sync.WaitGroup{}
 	c.files = store.NewFileStorage()
 	c.downloader = downloader.NewConcurrentDownloader(log, workers)
 	c.url = url
@@ -54,7 +51,6 @@ func NewClient(url, char string, workers uint, dlPath string, log *utils.Logger)
 		return nil, fmt.Errorf("'%s' is not a signle character", char)
 	}
 	c.char = []byte(char)
-	c.dlDone = make(chan struct{})
 	c.minCharIndex = newIndexHandler()
 	c.filesToDl = make(map[int][]string)
 	c.dlPath = dlPath
@@ -111,18 +107,11 @@ func listPath(url string) ([]string, error) {
 }
 
 func (c *client) getFiles() error {
-	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.dlDone, c.storeAndScan); err != nil {
+	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.storeAndScan); err != nil {
 		return fmt.Errorf("Error on downloader subscription: %v", err)
 	}
 	c.downloader.Start()
-DownloadLoop:
-	for {
-		select {
-		case <-c.dlDone:
-			c.log.Info("Fetching files' content done!")
-			break DownloadLoop
-		}
-	}
+	c.log.Info("Fetching files' content done!")
 	return nil
 }
 
