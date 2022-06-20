@@ -14,10 +14,10 @@ type fileShards []string
 type FileStorage struct {
 	mutex     sync.RWMutex
 	files     map[string]fileShards
-	chunkSize int
+	chunkSize uint64
 }
 
-func NewFileStorage(cs int) *FileStorage {
+func NewFileStorage(cs uint64) *FileStorage {
 	fs := new(FileStorage)
 	fs.files = make(map[string]fileShards)
 	fs.chunkSize = cs
@@ -46,7 +46,7 @@ func (fs *FileStorage) GetFilesnames() []string {
 	return filenames
 }
 
-func (fs *FileStorage) StoreFileShard(dir, filename string, shard int, buf []byte) error {
+func (fs *FileStorage) StoreFileShard(dir, filename string, shard uint64, buf []byte) error {
 	targetFile := fmt.Sprintf("%s/%s%d.tmp", dir, filename, shard)
 	file, err := os.Create(targetFile)
 	if err != nil {
@@ -106,7 +106,7 @@ func (fs *FileStorage) appendFiles(filename string, zipw *zip.Writer) error {
 }
 
 func (fs *FileStorage) joinShards(filename string) ([]byte, error) {
-	file := make([]byte, 0, len(fs.files[filename])*fs.chunkSize)
+	file := make([]byte, 0, uint64(len(fs.files[filename]))*fs.chunkSize)
 	for _, shard := range fs.files[filename] {
 		buf, err := os.ReadFile(shard)
 		if err != nil {
