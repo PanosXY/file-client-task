@@ -26,14 +26,12 @@ The client completes its execution with the below 3 steps:
 3. Client stores the files in a zip file
 
 To store the files there is a simple storage module with thread safety. Each file is stored in that storage.
-To download the files a simple non-blocking concurrent downloader has been implemented which takes a callback function
+To download the files a simple concurrent downloader has been implemented which takes a callback function
 to handle the http response after the file is got. The downloader operates with a pub/sub mechanism.
-The client initially subscribes to the downloader with the target url, the filenames, a channel that informs the subscriber
-if the download has been completed and the callback function that mention above.
-The callback function stores the content of the file byte slice using the io.Copy method which is more efficient than the
-iouti.ReadAll and then it scans the http response body (io.ReadCloser) rune by rune until the target character be found.
+The client initially subscribes to the downloader with the target url, the filenames and the callback function that mention above.
+The callback function reads the file in chunks, finds the character's index in the content and stores those chunks in /tmp directory.
 For this operation to be more optimized there is a thread safe integer where the found index is stored and only
-the least is processed. While scanner traversing the response body, if the current index passes the stored index the operation breaks.
+the least is processed. While scanner traversing the chunks, if the current index passes the stored index the operation breaks.
 Once the download has been completed, the client stores the files with the least index of the given character to a zip file.
 
 ### Usage:
