@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"sync"
 
@@ -15,12 +14,14 @@ import (
 )
 
 const (
-	zipFilename = "file-client-task.zip"
+	zipFilename string = "file-client-task.zip"
+	tmpDir      string = "/tmp"
+	chunkSize   int64  = 4 * 1024
 )
 
 type indexHandler struct {
 	sync.Mutex
-	index int
+	index int64
 }
 
 func newIndexHandler() *indexHandler {
@@ -35,24 +36,24 @@ type client struct {
 	files        *store.FileStorage
 	downloader   *downloader.ConcurrentDownloader
 	url          string
-	char         []byte
+	char         rune
 	minCharIndex *indexHandler
-	filesToDl    map[int][]string
+	filesToDl    map[int64][]string
 	dlPath       string
 	log          *utils.Logger
 }
 
 func NewClient(url, char string, workers uint, dlPath string, log *utils.Logger) (*client, error) {
 	c := new(client)
-	c.files = store.NewFileStorage()
+	c.files = store.NewFileStorage(int(chunkSize))
 	c.downloader = downloader.NewConcurrentDownloader(log, workers)
 	c.url = url
 	if len([]rune(char)) != 1 {
 		return nil, fmt.Errorf("'%s' is not a signle character", char)
 	}
-	c.char = []byte(char)
+	c.char = []rune(char)[0]
 	c.minCharIndex = newIndexHandler()
-	c.filesToDl = make(map[int][]string)
+	c.filesToDl = make(map[int64][]string)
 	c.dlPath = dlPath
 	c.log = log
 	return c, nil
@@ -69,7 +70,7 @@ func (c *client) Do() error {
 	}
 	// Download file(s)
 	if c.minCharIndex.index == -1 {
-		c.log.Info(fmt.Sprintf("No files found including character '%s' on url '%s'", c.char, c.url))
+		c.log.Info(fmt.Sprintf("No files found including character '%s' on url '%s'", string(c.char), c.url))
 		return nil
 	}
 	if err := c.files.SaveFiles(c.dlPath, zipFilename, c.filesToDl[c.minCharIndex.index]); err != nil {
@@ -107,40 +108,71 @@ func listPath(url string) ([]string, error) {
 }
 
 func (c *client) getFiles() error {
-	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.storeAndScan); err != nil {
+	if err := c.downloader.Subscribe(c.url, c.files.GetFilesnames(), c.scanAndStore); err != nil {
 		return fmt.Errorf("Error on downloader subscription: %v", err)
 	}
+	c.log.Info("Downloading...")
 	c.downloader.Start()
 	c.log.Info("Fetching files' content done!")
 	return nil
 }
 
-func (c *client) storeAndScan(filename string, content io.ReadCloser) error {
-	// Store
-	buf := bytes.Buffer{}
-	io.Copy(&buf, content)
-	cnt := ioutil.NopCloser(bytes.NewReader(buf.Bytes()))
-	c.files.SetFileContent(filename, buf.Bytes())
-	// Scan for index
-	scanner := bufio.NewScanner(cnt)
-	scanner.Split(bufio.ScanRunes)
-	c.minCharIndex.Lock()
-	for i := 0; scanner.Scan(); i++ {
-		if c.minCharIndex.index != -1 && i > c.minCharIndex.index {
-			// Break loop if file's index is greater than the stored min
+func (c *client) scanAndStore(filename string, content io.ReadCloser) error {
+	chunks := int64(0)
+	reader := bufio.NewReader(content)
+	buf := make([]byte, 0, chunkSize)
+	charFound := false
+	for {
+		n, err := reader.Read(buf[:cap(buf)])
+		buf = buf[:n]
+		if n == 0 {
+			if err == nil {
+				continue
+			}
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		chunks++
+		if err != nil && err != io.EOF {
+			return err
+		}
+		// Get index
+		if omit := c.getIndex(filename, buf, chunks, &charFound); omit {
 			break
 		}
-		if bytes.Compare(scanner.Bytes(), c.char) == 0 {
-			c.minCharIndex.index = i
-			c.fileToDownload(i, filename)
-			break
+		// Store
+		if err := c.files.StoreFileShard(tmpDir, filename, int(chunks), buf); err != nil {
+			return err
 		}
 	}
-	c.minCharIndex.Unlock()
 	return nil
 }
 
-func (c *client) fileToDownload(idx int, filename string) {
+func (c *client) getIndex(filename string, buf []byte, chunk int64, charFound *bool) bool {
+	if *charFound {
+		return false
+	}
+	// XXX: If a character is more than one byte and it happens to
+	//      be split by the chunks (i.e. character 'Я' at index 4095),
+	//      the below code does not work
+	if idx := bytes.IndexRune(buf, c.char); idx != -1 {
+		aggregatedIdx := int64(idx) + ((chunk - 1) * chunkSize)
+		c.minCharIndex.Lock()
+		if c.minCharIndex.index != -1 && aggregatedIdx > c.minCharIndex.index {
+			c.minCharIndex.Unlock()
+			return true
+		}
+		c.minCharIndex.index = aggregatedIdx
+		c.minCharIndex.Unlock()
+		c.fileToDownload(aggregatedIdx, filename)
+		*charFound = true
+	}
+	return false
+}
+
+func (c *client) fileToDownload(idx int64, filename string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if _, ok := c.filesToDl[idx]; !ok {

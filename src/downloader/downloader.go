@@ -93,7 +93,7 @@ func (d *ConcurrentDownloader) Start() error {
 		}
 	}
 	d.wg.Wait()
-	d.cleanup()
+	d.cleanUp()
 	return nil
 }
 
@@ -124,7 +124,7 @@ func (d *ConcurrentDownloader) getFile(filename string) {
 	}
 }
 
-func (d *ConcurrentDownloader) cleanup() {
+func (d *ConcurrentDownloader) cleanUp() {
 	d.url = ""
 	d.queue = []string{}
 	d.state = downloaderIdle

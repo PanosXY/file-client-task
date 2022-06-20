@@ -9,21 +9,25 @@ import (
 	"sync"
 )
 
+type fileShards []string
+
 type FileStorage struct {
-	mutex sync.RWMutex
-	files map[string][]byte
+	mutex     sync.RWMutex
+	files     map[string]fileShards
+	chunkSize int
 }
 
-func NewFileStorage() *FileStorage {
+func NewFileStorage(cs int) *FileStorage {
 	fs := new(FileStorage)
-	fs.files = make(map[string][]byte)
+	fs.files = make(map[string]fileShards)
+	fs.chunkSize = cs
 	return fs
 }
 
 func (fs *FileStorage) NewFile(filename string) {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
-	fs.files[filename] = nil
+	fs.files[filename] = make(fileShards, 0)
 }
 
 func (fs *FileStorage) Len() int {
@@ -42,21 +46,30 @@ func (fs *FileStorage) GetFilesnames() []string {
 	return filenames
 }
 
-func (fs *FileStorage) SetFileContent(filename string, content []byte) {
-	fs.mutex.Lock()
-	defer fs.mutex.Unlock()
-	fs.files[filename] = content
+func (fs *FileStorage) StoreFileShard(dir, filename string, shard int, buf []byte) error {
+	targetFile := fmt.Sprintf("%s/%s%d.tmp", dir, filename, shard)
+	file, err := os.Create(targetFile)
+	if err != nil {
+		return fmt.Errorf("Failed to create tmp file for '%s': %v", filename, err)
+	}
+	defer file.Close()
+	if _, err := io.Copy(file, bytes.NewReader(buf)); err != nil {
+		return fmt.Errorf("Failed to save tmp file for '%s': %v", filename, err)
+	}
+	fs.setShard(filename, targetFile)
+	return nil
 }
 
-func (fs *FileStorage) GetFileContent(filename string) []byte {
-	fs.mutex.RLock()
-	defer fs.mutex.RUnlock()
-	return fs.files[filename]
+func (fs *FileStorage) setShard(filename, shard string) {
+	fs.mutex.Lock()
+	defer fs.mutex.Unlock()
+	fs.files[filename] = append(fs.files[filename], shard)
 }
 
 func (fs *FileStorage) SaveFiles(path, zipFilename string, filenames []string) error {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
+	defer fs.deleteFileShards()
 	if len(filenames) == 0 {
 		return fmt.Errorf("There are no files to save")
 	}
@@ -82,8 +95,32 @@ func (fs *FileStorage) appendFiles(filename string, zipw *zip.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(w, bytes.NewReader(fs.files[filename])); err != nil {
+	file, err := fs.joinShards(filename)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(w, bytes.NewReader(file)); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (fs *FileStorage) joinShards(filename string) ([]byte, error) {
+	file := make([]byte, 0, len(fs.files[filename])*fs.chunkSize)
+	for _, shard := range fs.files[filename] {
+		buf, err := os.ReadFile(shard)
+		if err != nil {
+			return nil, err
+		}
+		file = append(file, buf...)
+	}
+	return file, nil
+}
+
+func (fs *FileStorage) deleteFileShards() {
+	for _, shards := range fs.files {
+		for _, v := range shards {
+			os.Remove(v)
+		}
+	}
 }
